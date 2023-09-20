@@ -1,0 +1,111 @@
+version: '3'
+services:
+  redis:
+    image: 'redis/redis-stack:latest'
+    restart: always
+    container_name: redis
+    ports:
+      - '6379:6379'
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+#      - REDIS_PASSWORD=password123
+#      - REDIS_ACLFILE=/opt/bitnami/redis/mounted-etc/users.acl
+#    command: /opt/bitnami/scripts/redis/run.sh --maxmemory 100mb
+
+  influxdb:
+    image: influxdb:latest
+    container_name: influxdb
+    ports:
+      - '8086:8086'
+    restart: always
+    environment:
+      - INFLUXDB_HTTP_AUTH_ENABLED
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_BUCKET=hlab-influxdb
+      - DOCKER_INFLUXDB_INIT_USERNAME=uddd
+      - DOCKER_INFLUXDB_INIT_PASSWORD=vnpayadmin123
+      - DOCKER_INFLUXDB_INIT_ORG=home-lab
+      - DOCKER_INFLUXDB_INIT_RETENTION=365d
+
+  postgresql-master:
+    image: 'bitnami/postgresql:latest'
+    restart: always
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRESQL_REPLICATION_MODE=master
+      - POSTGRESQL_REPLICATION_USER=repl_uddd
+      - POSTGRESQL_REPLICATION_PASSWORD=repl_vnpay
+      - POSTGRESQL_USERNAME=uddd
+      - POSTGRESQL_PASSWORD=Vnpay@123
+      - POSTGRESQL_DATABASE=analytics
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 22181:2181
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - 29092:29092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+      KAFKA_DELETE_TOPIC_ENABLE: true
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  telegraf:
+    image: telegraf:latest
+    container_name: telegraf
+    restart: always
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    depends_on:
+      - influxdb
+    links:
+        - influxdb
+    ports:
+        - '8125:8125'
+  grafana:
+    image: grafana/grafana
+    container_name: grafana-server
+    restart: always
+    depends_on:
+      - influxdb
+    environment:
+      - GF_SECURITY_ADMIN_USER=uddd
+      - GF_SECURITY_ADMIN_PASSWORD=vnpayadmin123
+      - GF_INSTALL_PLUGINS=
+    links:
+      - influxdb
+    ports:
+      - '3000:3000'
+    volumes:
+      - grafana_data:/var/lib/grafana
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - '9000:9000'
+
+volumes:
+  grafana_data:
+  prometheus_data:
