@@ -104,7 +104,7 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
     ports:
-      - '9000:9000'
+      - '9090:9090'
 
 volumes:
   grafana_data:
